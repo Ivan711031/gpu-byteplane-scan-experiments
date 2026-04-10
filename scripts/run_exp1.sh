@@ -73,6 +73,15 @@ gpu_name="${GPU_NAME_OVERRIDE:-$(detect_gpu_name)}"
 gpu_tag="$(normalize_gpu_tag "$gpu_name")"
 run_dir="$RESULTS_BASE/run_${timestamp}_job${job_id}_${gpu_tag}"
 
+cleanup_failed_run() {
+  local status=$?
+  if [[ $status -ne 0 && -n "${run_dir:-}" && -d "${run_dir}" ]]; then
+    rm -rf "$run_dir"
+    printf 'run failed; removed partial output directory: %s\n' "$run_dir" >&2
+  fi
+}
+trap cleanup_failed_run EXIT
+
 mkdir -p "$run_dir"
 
 if [[ "$PLANE_BYTES" != "1" && "$PLANE_BYTES" != "2" ]]; then
