@@ -1,11 +1,12 @@
 M03-initial-guide.md
 
 build/
-results/
 
-*.log
-*.err
+# results/ intentionally tracked for benchmark artifacts.
 
-exp0_hbm_bw.csv
-exp0_*.csv
-exp1*.csv
+/*.log
+/*.err
+
+/exp0_hbm_bw.csv
+/exp0_*.csv
+/exp1*.csv
