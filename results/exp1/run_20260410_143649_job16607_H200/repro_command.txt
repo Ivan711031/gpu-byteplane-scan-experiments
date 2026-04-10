@@ -1,0 +1,2 @@
+cd /home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments
+/home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/build/exp1/bench_byteplane_scan --device 0 --n 1024 --plane_bytes 1 --strategy byte --k_min 1 --k_max 1 --block 256 --grid_mul 1 --warmup 0 --iters 1 --csv /home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/results/exp1/run_20260410_143649_job16607_H200/exp1.csv 

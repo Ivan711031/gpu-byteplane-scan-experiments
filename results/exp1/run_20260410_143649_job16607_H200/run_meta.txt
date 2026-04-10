@@ -1,0 +1,16 @@
+timestamp=20260410_143649
+hostname=25a-hgpn069
+pwd=/home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments
+slurm_job_id=16607
+slurm_job_name=bash
+slurm_job_partition=dev
+cuda_visible_devices=0
+gpu_name=NVIDIA H200
+gpu_tag=H200
+device_index=0
+cuda_arch=90
+git_branch=main
+git_commit=145263d538fda75ba83de792ede87aad14c1115a
+git_dirty=dirty
+memory_setup_file=/home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/results/exp1/run_20260410_143649_job16607_H200/setup_estimate.txt
+command_exp1=/home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/build/exp1/bench_byteplane_scan --device 0 --n 1024 --plane_bytes 1 --strategy byte --k_min 1 --k_max 1 --block 256 --grid_mul 1 --warmup 0 --iters 1 --csv /home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/results/exp1/run_20260410_143649_job16607_H200/exp1.csv 

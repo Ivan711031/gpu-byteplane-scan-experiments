@@ -1,0 +1,17 @@
+timestamp=20260410_143905
+hostname=25a-hgpn069
+pwd=/home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments
+slurm_job_id=16608
+slurm_job_name=bash
+slurm_job_partition=dev
+cuda_visible_devices=0
+gpu_name=NVIDIA H200
+gpu_tag=H200
+device_index=0
+cuda_arch=90
+git_branch=main
+git_commit=145263d538fda75ba83de792ede87aad14c1115a
+git_dirty=dirty
+command_seq=/home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/build/exp0/bench_hbm_bw --mode seq --device 0 --bytes_min 1MB --bytes_max 8GB --bytes_mult 2 --block 256 --grid_mul 1 --warmup 10 --iters 200 --csv /home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/results/exp0/run_20260410_143905_job16608_H200/exp0_seq.csv 
+command_masked=/home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/build/exp0/bench_hbm_bw --mode masked --device 0 --bytes_min 1MB --bytes_max 8GB --bytes_mult 2 --block 256 --grid_mul 1 --warmup 10 --iters 200 --mask_stride 2 --mask_active 1 --csv /home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/results/exp0/run_20260410_143905_job16608_H200/exp0_masked.csv 
+command_gather=/home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/build/exp0/bench_hbm_bw --mode gather --device 0 --bytes_min 1MB --bytes_max 8GB --bytes_mult 2 --block 256 --grid_mul 1 --warmup 10 --iters 200 --gather_span 0 --gather_seed 1 --csv /home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/results/exp0/run_20260410_143905_job16608_H200/exp0_gather.csv 
