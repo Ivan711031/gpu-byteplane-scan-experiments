@@ -1,10 +1,23 @@
-# Experiment 1 — Byte-plane scaling (SOA)
+# Experiment 1 - Byte-plane scaling (SOA)
 
-目標：驗證 **讀更少 byte-planes 是否等比例節省頻寬**。資料 layout 採 SOA：把每個 FP64 value 的 8 個 bytes 拆成 8 個獨立、連續陣列（byte-plane）。
+目標：驗證讀更少 byte-planes 是否等比例節省頻寬。
 
-這個 benchmark 只量測「掃描讀取」本身的有效頻寬（dummy reduction：只在 register 做累加，最後每個 block 寫 1 個值到 global）。
+資料 layout 採 SOA：每個 FP64 value 的 8 個 bytes 拆成獨立連續 planes。
+
+## 重要行為
+
+- 這個 benchmark 只量測掃描讀取吞吐。
+- 程式在 runtime 直接配置並初始化 planes，不需要外部 dataset 檔案。
+- CSV 會寫入 `device/sm/cc`，方便分辨實際跑在 H100 或 H200。
 
 ## Build
+
+```bash
+cmake -S benchmarks/experiment1 -B build/exp1 -DCMAKE_BUILD_TYPE=Release
+cmake --build build/exp1 -j
+```
+
+Hopper（H100/H200）常用：
 
 ```bash
 cmake -S benchmarks/experiment1 -B build/exp1 -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=90
@@ -13,7 +26,31 @@ cmake --build build/exp1 -j
 
 ## Run
 
-預設：`n=1e8`，`k=1..8`，輸出單一 CSV：
+### 推薦：使用 runner
+
+```bash
+./scripts/run_exp1.sh
+```
+
+Runner 預設配置：
+
+- `plane_bytes=1`
+- `strategy=byte`
+- `k=1..8`
+
+輸出目錄：
+
+- `results/exp1/run_<timestamp>_job<jobid_or_nojob>_<gpu_tag>/`
+
+同一個 run directory 內會有：
+
+- `exp1.csv`
+- `setup_estimate.txt`（memory setup 摘要）
+- `run_meta.txt`
+- `repro_command.txt`
+- `ncu_command_template.txt`
+
+### 直接執行
 
 ```bash
 ./build/exp1/bench_byteplane_scan --csv exp1.csv
@@ -35,11 +72,11 @@ cmake --build build/exp1 -j
 
 ## Strategies
 
-- `--strategy byte`：每個 thread 對每個 plane 直接做 `uint8` load（最貼近「1-byte load 是否被懲罰」的核心問題）。
-- `--strategy packed32`：把每個 plane 當成 `uint32` 陣列讀，每個 load 吃 4 個 elements（避免 1-byte 指令，測試「packed read」路線）。
-- `--strategy shared128`：每個 warp 先 stage 128B 到 shared（每 lane 讀 4 bytes），再每 lane 只用其中 1 byte；這是刻意 overfetch 以逼出 coalesced transaction，用來評估 staging 是否值得。
+- `--strategy byte`: 每個 thread 對每個 plane 直接做 `uint8` load。
+- `--strategy packed32`: 每次 `uint32` 讀取 4 個 elements，避免 1-byte 指令。
+- `--strategy shared128`: warp 先 stage 128B 到 shared，再每 lane 取其中 1 byte（刻意 overfetch）。
 
-另外支援 `--plane_bytes 2`：把 planes 改為 4 個 `uint16` plane（相當於 2-byte planes）。此時策略固定為 `byte`（u16 loads）。
+另支援 `--plane_bytes 2`（4 個 `uint16` planes），此時策略固定為 `byte`（u16 loads）。
 
 ## Output
 
@@ -47,5 +84,4 @@ CSV 欄位包含：
 
 - `logical_bytes = n * k * plane_bytes`
 - `logical_GBps`：用 logical bytes 計算的 GB/s（1e9）
-- `overfetch_factor`：`shared128` 會是 `4.0`（代表每個 lane 實際 stage 4 bytes，但只用 1 byte）
-
+- `overfetch_factor`：`shared128` 會是 `4.0`

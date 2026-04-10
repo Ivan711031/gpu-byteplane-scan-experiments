@@ -1,92 +1,83 @@
 # GPU Byte-Plane Scan Experiments
 
 ## 計劃目標
-這個專案要驗證「progressive byte-plane 掃描」在 GPU 上是否能有效節省 HBM 頻寬，並建立 precision-throughput 曲線。核心想法是把 FP64 拆成 byte-planes，先讀高位、逐層補精度，縮小每次掃描的資料量。
+這個專案驗證 progressive byte-plane 掃描在 GPU 上是否能節省 HBM 頻寬，並建立 precision-throughput 曲線。
 
-## 目前工作階段
-目前完成的內容聚焦在實驗 0 與實驗 1 的基礎 benchmark。
+## 專案範圍
+目前聚焦兩個基礎實驗：
 
-- Experiment 0：HBM bandwidth microbenchmark
-- Experiment 1：Byte-plane 掃描 throughput 的 scaling 行為
+- Experiment 0: HBM bandwidth microbenchmark
+- Experiment 1: Byte-plane scan throughput scaling
 
-這兩個實驗是後續所有結果的基準與前提，因此優先完成。
+程式只做 benchmark，不含資料庫層整合。
 
-## 專案程式在做什麼
-專案中的程式用來量測 GPU HBM 讀取頻寬與 byte-plane scan 的吞吐量，不包含 encoding/decoding 或資料庫層的功能。
-
-目前包含：
-- `benchmarks/experiment0/bench_hbm_bw.cu`
-  用 dummy reduction 測量 GPU global memory 的有效讀取頻寬，支援三種存取模式：
-  `seq`（coalesced sequential read）、`masked`（部分 lane 閒置）、`gather`（index array 隨機讀取）。
-- `benchmarks/experiment1/bench_byteplane_scan.cu`
-  量測 byte-plane layout 的掃描 throughput，並比較不同讀取策略。
-- `scripts/run_exp0.sh`
-  一鍵跑完 Experiment 0 的三種模式輸出 CSV。
-
-## 環境需求
-必須在 Linux + NVIDIA GPU 環境執行（例如國網中心的 nano4）。
+## 執行環境
+本專案針對 Linux + NVIDIA CUDA 環境設計，TWCC 環境可能會落到 H100 或 H200。
 
 需求：
-- NVIDIA Driver
-- CUDA Toolkit（需要 `nvcc`）
-- CMake >= 3.24
-- C++ 編譯器（gcc/g++ 或 clang，支援 C++17）
 
-建議：
-- Ninja（加速 build）
+- NVIDIA Driver
+- CUDA Toolkit (`nvcc`)
+- CMake >= 3.24
+- C++17 編譯器
+
+`-DCMAKE_CUDA_ARCHITECTURES=90` 適用 Hopper 家族（H100/H200）。目前 runner 預設 `CUDA_ARCH=90`，可用環境變數覆寫。
+
+## 正式入口
+正式 benchmark runner：
+
+- `scripts/run_exp0.sh`
+- `scripts/run_exp1.sh`
+
+Slurm wrapper（exp0 範例）：
+
+- `run_exp0.sh`（用 `sbatch run_exp0.sh` 送出）
 
 ## 快速開始
 
-### Experiment 0：HBM bandwidth
-建置與執行：
-
-```bash
-cmake -S benchmarks/experiment0 -B build/exp0 -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=90
-cmake --build build/exp0 -j
-./build/exp0/bench_hbm_bw --mode seq --csv exp0_hbm_bw.csv
-```
-
-一鍵腳本（跑 seq/masked/gather 三種模式）：
+### Experiment 0（runner）
 
 ```bash
 ./scripts/run_exp0.sh
 ```
 
-輸出 CSV 預設在 `results/exp0/`。
-
-常用參數：
+常用覆寫參數（環境變數）：
 
 ```bash
-./build/exp0/bench_hbm_bw \
-  --mode masked \
-  --mask_stride 2 --mask_active 1 \
-  --bytes_min 1MB --bytes_max 8GB --bytes_mult 2 \
-  --block 256 --grid_mul 1 \
-  --warmup 10 --iters 200 \
-  --csv exp0_masked.csv
+DEVICE=0 CUDA_ARCH=90 BYTES_MIN=1MB BYTES_MAX=8GB ITERS=200 ./scripts/run_exp0.sh
 ```
 
-### Experiment 1：Byte-plane scaling
-建置與執行：
+### Experiment 1（runner）
 
 ```bash
-cmake -S benchmarks/experiment1 -B build/exp1 -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=90
-cmake --build build/exp1 -j
-./build/exp1/bench_byteplane_scan --csv exp1.csv
+./scripts/run_exp1.sh
 ```
 
-## 常見問題
+常用覆寫參數（環境變數）：
 
-Q：為什麼一定要 Linux + NVIDIA GPU？
-因為這些 benchmark 都用 CUDA，macOS 不支援 NVIDIA CUDA 開發。
+```bash
+DEVICE=0 CUDA_ARCH=90 N=100000000 PLANE_BYTES=1 STRATEGY=byte K_MIN=1 K_MAX=8 ./scripts/run_exp1.sh
+```
 
-Q：`-DCMAKE_CUDA_ARCHITECTURES=90` 一定要嗎？
-不一定。這是 H100 的 SM 版本。請依實際 GPU 調整，例如 A100 用 80，V100 用 70。
+## 輸出與可追蹤性
+每次 runner 執行都會建立獨立 run directory，不會覆寫前一次結果：
 
-## 後續計劃
-後續會進行：
-- Experiment 2：截斷誤差分析
-- Experiment 3：Progressive aggregation kernel
-- Experiment 4：Progressive filter kernel
+- `results/exp0/run_<timestamp>_job<jobid_or_nojob>_<gpu_tag>/`
+- `results/exp1/run_<timestamp>_job<jobid_or_nojob>_<gpu_tag>/`
 
-這些實驗完成後會補上圖表與論文用的結果整理腳本。
+每個 run directory 會包含：
+
+- CSV 結果
+- `run_meta.txt`
+- `repro_command.txt`
+- `ncu_command_template.txt`
+
+`gpu_tag` 由執行當下偵測 GPU 名稱產生，至少會區分 H100/H200。
+
+## 額外說明
+
+- `exp0` runner 預設會跑 `seq`、`masked`、`gather` 三種 mode。
+- `exp1` 目前不依賴外部 dataset，程式會在 runtime 直接建立並初始化 SOA planes。
+- 若要看各實驗細節，請讀：
+  - `benchmarks/experiment0/README.md`
+  - `benchmarks/experiment1/README.md`

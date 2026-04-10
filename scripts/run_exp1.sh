@@ -2,23 +2,20 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="${BUILD_DIR:-$ROOT_DIR/build/exp0}"
-RESULTS_BASE="${RESULTS_BASE:-$ROOT_DIR/results/exp0}"
+BUILD_DIR="${BUILD_DIR:-$ROOT_DIR/build/exp1}"
+RESULTS_BASE="${RESULTS_BASE:-$ROOT_DIR/results/exp1}"
 
 DEVICE="${DEVICE:-0}"
-BYTES_MIN="${BYTES_MIN:-1MB}"
-BYTES_MAX="${BYTES_MAX:-8GB}"
-BYTES_MULT="${BYTES_MULT:-2}"
+N="${N:-100000000}"
+PLANE_BYTES="${PLANE_BYTES:-1}"
+STRATEGY="${STRATEGY:-byte}"
+K_MIN="${K_MIN:-1}"
+K_MAX="${K_MAX:-8}"
 BLOCK="${BLOCK:-256}"
 GRID_MUL="${GRID_MUL:-1}"
 WARMUP="${WARMUP:-10}"
 ITERS="${ITERS:-200}"
 CUDA_ARCH="${CUDA_ARCH:-90}"
-
-MASK_STRIDE="${MASK_STRIDE:-2}"
-MASK_ACTIVE="${MASK_ACTIVE:-1}"
-GATHER_SPAN="${GATHER_SPAN:-0}"
-GATHER_SEED="${GATHER_SEED:-1}"
 
 join_cmd() {
   printf '%q ' "$@"
@@ -78,8 +75,32 @@ run_dir="$RESULTS_BASE/run_${timestamp}_job${job_id}_${gpu_tag}"
 
 mkdir -p "$run_dir"
 
+if [[ "$PLANE_BYTES" != "1" && "$PLANE_BYTES" != "2" ]]; then
+  echo "error: PLANE_BYTES must be 1 or 2, got: $PLANE_BYTES" >&2
+  exit 2
+fi
+
+if [[ "$PLANE_BYTES" == "1" ]]; then
+  total_planes=8
+else
+  total_planes=4
+fi
+
+plane_alloc_bytes=$((N * PLANE_BYTES * total_planes))
+pointer_array_bytes=$((total_planes * 8))
+
+setup_file="$run_dir/setup_estimate.txt"
+{
+  printf 'n=%s\n' "$N"
+  printf 'plane_bytes=%s\n' "$PLANE_BYTES"
+  printf 'total_planes=%s\n' "$total_planes"
+  printf 'estimated_plane_allocation_bytes=%s\n' "$plane_alloc_bytes"
+  printf 'estimated_pointer_array_bytes=%s\n' "$pointer_array_bytes"
+  printf 'notes=d_out_allocation_depends_on_runtime_occupancy_grid\n'
+} > "$setup_file"
+
 cmake_args=(
-  -S "$ROOT_DIR/benchmarks/experiment0"
+  -S "$ROOT_DIR/benchmarks/experiment1"
   -B "$BUILD_DIR"
   -DCMAKE_BUILD_TYPE=Release
   "-DCMAKE_CUDA_ARCHITECTURES=$CUDA_ARCH"
@@ -88,21 +109,20 @@ cmake_args=(
 cmake "${cmake_args[@]}"
 cmake --build "$BUILD_DIR" -j
 
-bin="$BUILD_DIR/bench_hbm_bw"
-common_args=(
+bin="$BUILD_DIR/bench_byteplane_scan"
+exp1_cmd=(
+  "$bin"
   --device "$DEVICE"
-  --bytes_min "$BYTES_MIN" --bytes_max "$BYTES_MAX" --bytes_mult "$BYTES_MULT"
+  --n "$N"
+  --plane_bytes "$PLANE_BYTES"
+  --strategy "$STRATEGY"
+  --k_min "$K_MIN" --k_max "$K_MAX"
   --block "$BLOCK" --grid_mul "$GRID_MUL"
   --warmup "$WARMUP" --iters "$ITERS"
+  --csv "$run_dir/exp1.csv"
 )
 
-seq_cmd=("$bin" --mode seq "${common_args[@]}" --csv "$run_dir/exp0_seq.csv")
-masked_cmd=("$bin" --mode masked "${common_args[@]}" --mask_stride "$MASK_STRIDE" --mask_active "$MASK_ACTIVE" --csv "$run_dir/exp0_masked.csv")
-gather_cmd=("$bin" --mode gather "${common_args[@]}" --gather_span "$GATHER_SPAN" --gather_seed "$GATHER_SEED" --csv "$run_dir/exp0_gather.csv")
-
-"${seq_cmd[@]}"
-"${masked_cmd[@]}"
-"${gather_cmd[@]}"
+"${exp1_cmd[@]}"
 
 meta_file="$run_dir/run_meta.txt"
 {
@@ -120,24 +140,22 @@ meta_file="$run_dir/run_meta.txt"
   printf 'git_branch=%s\n' "$git_branch"
   printf 'git_commit=%s\n' "$git_commit"
   printf 'git_dirty=%s\n' "$git_dirty"
-  printf 'command_seq=%s\n' "$(join_cmd "${seq_cmd[@]}")"
-  printf 'command_masked=%s\n' "$(join_cmd "${masked_cmd[@]}")"
-  printf 'command_gather=%s\n' "$(join_cmd "${gather_cmd[@]}")"
+  printf 'memory_setup_file=%s\n' "$setup_file"
+  printf 'command_exp1=%s\n' "$(join_cmd "${exp1_cmd[@]}")"
 } > "$meta_file"
 
 {
   printf 'cd %q\n' "$ROOT_DIR"
-  printf '%s\n' "$(join_cmd "${seq_cmd[@]}")"
-  printf '%s\n' "$(join_cmd "${masked_cmd[@]}")"
-  printf '%s\n' "$(join_cmd "${gather_cmd[@]}")"
+  printf '%s\n' "$(join_cmd "${exp1_cmd[@]}")"
 } > "$run_dir/repro_command.txt"
 
 {
   printf '# Adjust metrics and output path as needed.\n'
   printf 'cd %q\n' "$ROOT_DIR"
   printf 'ncu --set full --target-processes all --export %q %s\n' \
-    "$run_dir/ncu_exp0_seq" "$(join_cmd "$bin" --mode seq "${common_args[@]}" --csv "$run_dir/exp0_seq_ncu.csv")"
+    "$run_dir/ncu_exp1" "$(join_cmd "$bin" --device "$DEVICE" --n "$N" --plane_bytes "$PLANE_BYTES" --strategy "$STRATEGY" --k_min "$K_MIN" --k_max "$K_MAX" --block "$BLOCK" --grid_mul "$GRID_MUL" --warmup "$WARMUP" --iters "$ITERS" --csv "$run_dir/exp1_ncu.csv")"
 } > "$run_dir/ncu_command_template.txt"
 
-printf 'exp0 outputs in: %s\n' "$run_dir"
+printf 'exp1 outputs in: %s\n' "$run_dir"
+printf 'setup summary: %s\n' "$setup_file"
 printf 'metadata: %s\n' "$meta_file"

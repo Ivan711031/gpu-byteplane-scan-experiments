@@ -1,1 +1,11 @@
 M03-initial-guide.md
+
+build/
+results/
+
+*.log
+*.err
+
+exp0_hbm_bw.csv
+exp0_*.csv
+exp1*.csv
