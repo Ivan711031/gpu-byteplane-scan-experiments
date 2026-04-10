@@ -152,7 +152,8 @@ meta_file="$run_dir/run_meta.txt"
 {
   printf '# Adjust metrics and output path as needed.\n'
   printf 'cd %q\n' "$ROOT_DIR"
-  printf 'ncu --set full --target-processes all --export %q %s\n' \
+  printf 'ncu --set full --target-processes all --import-source yes --source-folders %q --export %q %s\n' \
+    "$ROOT_DIR" \
     "$run_dir/ncu_exp1" "$(join_cmd "$bin" --device "$DEVICE" --n "$N" --plane_bytes "$PLANE_BYTES" --strategy "$STRATEGY" --k_min "$K_MIN" --k_max "$K_MAX" --block "$BLOCK" --grid_mul "$GRID_MUL" --warmup "$WARMUP" --iters "$ITERS" --csv "$run_dir/exp1_ncu.csv")"
 } > "$run_dir/ncu_command_template.txt"
 
