@@ -72,6 +72,7 @@ job_id="${SLURM_JOB_ID:-nojob}"
 gpu_name="${GPU_NAME_OVERRIDE:-$(detect_gpu_name)}"
 gpu_tag="$(normalize_gpu_tag "$gpu_name")"
 run_dir="$RESULTS_BASE/run_${timestamp}_job${job_id}_${gpu_tag}"
+run_desc="${RUN_DESC:-"No description provided for this run."}"
 
 cleanup_failed_run() {
   local status=$?
@@ -135,6 +136,7 @@ exp1_cmd=(
 
 meta_file="$run_dir/run_meta.txt"
 {
+  printf 'run_description=%s\n' "$run_desc"
   printf 'timestamp=%s\n' "$timestamp"
   printf 'hostname=%s\n' "$(hostname)"
   printf 'pwd=%s\n' "$PWD"
