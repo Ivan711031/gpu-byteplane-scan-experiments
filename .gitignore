@@ -10,3 +10,4 @@ build/
 /exp0_hbm_bw.csv
 /exp0_*.csv
 /exp1*.csv
+crystal/
