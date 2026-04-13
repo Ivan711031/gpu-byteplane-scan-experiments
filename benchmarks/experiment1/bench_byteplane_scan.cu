@@ -265,8 +265,16 @@ namespace
     }
   }
 
+  template <typename T, int N>
+  struct PlanePointers
+  {
+    const T *ptrs[N];
+  };
+
+  using U8Planes = PlanePointers<uint8_t, 8>;
+
   template <int K>
-  __global__ void scan_planes_u8_byte_unrolled(const uint8_t *const *__restrict__ planes,
+  __global__ void scan_planes_u8_byte_unrolled(const U8Planes planes,
                                                uint64_t n,
                                                unsigned long long *__restrict__ per_block_out)
   {
@@ -279,7 +287,7 @@ namespace
     {
 #pragma unroll
       for (int p = 0; p < K; p++)
-        sum += static_cast<unsigned long long>(planes[p][i]);
+        sum += static_cast<unsigned long long>(planes.ptrs[p][i]);
     }
     block_reduce_store(sum, per_block_out);
   }
@@ -312,7 +320,7 @@ namespace
   void launch_scan_planes_u8_byte_unrolled(int k,
                                            int grid,
                                            int block_threads,
-                                           const uint8_t *const *planes,
+                                           const U8Planes &planes,
                                            uint64_t n,
                                            unsigned long long *per_block_out)
   {
@@ -495,7 +503,7 @@ namespace
 
   RunResult run_one(const Options &opt,
                     int k,
-                    const std::vector<void *> &d_planes,
+                    const U8Planes &u8_planes,
                     void *d_plane_ptrs,
                     unsigned long long *d_out,
                     int grid)
@@ -515,7 +523,7 @@ namespace
         launch_scan_planes_u8_byte_unrolled(k,
                                             grid,
                                             opt.block_threads,
-                                            reinterpret_cast<const uint8_t *const *>(d_plane_ptrs),
+                                            u8_planes,
                                             opt.n,
                                             d_out);
       }
@@ -551,7 +559,7 @@ namespace
         launch_scan_planes_u8_byte_unrolled(k,
                                             grid,
                                             opt.block_threads,
-                                            reinterpret_cast<const uint8_t *const *>(d_plane_ptrs),
+                                            u8_planes,
                                             opt.n,
                                             d_out);
       }
@@ -705,6 +713,7 @@ int main(int argc, char **argv)
 
   // Device pointer array for kernels.
   void *d_plane_ptrs = nullptr;
+  U8Planes h_u8_planes{};
 
   if (opt.plane_bytes == 1 && opt.strategy == "packed32")
   {
@@ -720,7 +729,7 @@ int main(int argc, char **argv)
                           cudaMemcpyHostToDevice),
                "cudaMemcpy(ptrs32)");
   }
-  else if (opt.plane_bytes == 1)
+  else if (opt.plane_bytes == 1 && opt.strategy == "shared128")
   {
     std::vector<uint8_t *> h_ptrs;
     h_ptrs.reserve(d_planes.size());
@@ -732,6 +741,11 @@ int main(int argc, char **argv)
                           d_planes.size() * sizeof(uint8_t *),
                           cudaMemcpyHostToDevice),
                "cudaMemcpy(ptrs8)");
+  }
+  else if (opt.plane_bytes == 1 && opt.strategy == "byte")
+  {
+    for (int p = 0; p < 8; p++)
+      h_u8_planes.ptrs[p] = static_cast<const uint8_t *>(d_planes[static_cast<size_t>(p)]);
   }
   else
   {
@@ -748,28 +762,39 @@ int main(int argc, char **argv)
   }
 
   // Allocate per-block output to keep loads alive.
-  int grid = 1;
-  if (opt.plane_bytes == 2)
+  int grid_single = 1;
+  std::vector<int> grid_by_k(9, 1); // use indices [1..8]
+  int max_needed_grid = 1;
+
+  if (opt.plane_bytes == 1 && opt.strategy == "byte")
   {
-    grid = occupancy_grid(opt.device, opt.block_threads, opt.grid_mul,
-                          reinterpret_cast<const void *>(scan_planes_u16), 0);
+    for (int kk = 1; kk <= 8; kk++)
+    {
+      int g = occupancy_grid(opt.device, opt.block_threads, opt.grid_mul,
+                             scan_planes_u8_byte_unrolled_kernel_ptr(kk), 0);
+      grid_by_k[static_cast<size_t>(kk)] = g;
+      if (g > max_needed_grid)
+        max_needed_grid = g;
+    }
   }
-  else if (opt.strategy == "byte")
+  else if (opt.plane_bytes == 2)
   {
-    int k_for_occupancy = opt.single_k ? opt.k_single : opt.k_max;
-    grid = occupancy_grid(opt.device, opt.block_threads, opt.grid_mul,
-                          scan_planes_u8_byte_unrolled_kernel_ptr(k_for_occupancy), 0);
+    grid_single = occupancy_grid(opt.device, opt.block_threads, opt.grid_mul,
+                                 reinterpret_cast<const void *>(scan_planes_u16), 0);
+    max_needed_grid = grid_single;
   }
   else if (opt.strategy == "packed32")
   {
-    grid = occupancy_grid(opt.device, opt.block_threads, opt.grid_mul,
-                          reinterpret_cast<const void *>(scan_planes_u8_packed32), 0);
+    grid_single = occupancy_grid(opt.device, opt.block_threads, opt.grid_mul,
+                                 reinterpret_cast<const void *>(scan_planes_u8_packed32), 0);
+    max_needed_grid = grid_single;
   }
   else if (opt.strategy == "shared128")
   {
     size_t shmem = static_cast<size_t>(opt.block_threads / 32) * 128ull;
-    grid = occupancy_grid(opt.device, opt.block_threads, opt.grid_mul,
-                          reinterpret_cast<const void *>(scan_planes_u8_shared128), shmem);
+    grid_single = occupancy_grid(opt.device, opt.block_threads, opt.grid_mul,
+                                 reinterpret_cast<const void *>(scan_planes_u8_shared128), shmem);
+    max_needed_grid = grid_single;
   }
   else
   {
@@ -777,9 +802,9 @@ int main(int argc, char **argv)
   }
 
   unsigned long long *d_out = nullptr;
-  cuda_check(cudaMalloc(&d_out, static_cast<size_t>(grid) * sizeof(unsigned long long)),
+  cuda_check(cudaMalloc(&d_out, static_cast<size_t>(max_needed_grid) * sizeof(unsigned long long)),
              "cudaMalloc(d_out)");
-  cuda_check(cudaMemset(d_out, 0, static_cast<size_t>(grid) * sizeof(unsigned long long)),
+  cuda_check(cudaMemset(d_out, 0, static_cast<size_t>(max_needed_grid) * sizeof(unsigned long long)),
              "cudaMemset(d_out)");
 
   std::FILE *f = std::fopen(opt.csv_path.c_str(), "wb");
@@ -790,7 +815,10 @@ int main(int argc, char **argv)
 
   for (int k : make_k_sweep(opt))
   {
-    RunResult r = run_one(opt, k, d_planes, d_plane_ptrs, d_out, grid);
+    int grid = (opt.plane_bytes == 1 && opt.strategy == "byte")
+                   ? grid_by_k[static_cast<size_t>(k)]
+                   : grid_single;
+    RunResult r = run_one(opt, k, h_u8_planes, d_plane_ptrs, d_out, grid);
     double logical_bytes = static_cast<double>(r.n) * static_cast<double>(r.k) *
                            static_cast<double>(r.plane_bytes);
     std::fprintf(f,
@@ -826,7 +854,8 @@ int main(int argc, char **argv)
   std::fclose(f);
 
   cuda_check(cudaFree(d_out), "cudaFree(d_out)");
-  cuda_check(cudaFree(d_plane_ptrs), "cudaFree(d_plane_ptrs)");
+  if (d_plane_ptrs != nullptr)
+    cuda_check(cudaFree(d_plane_ptrs), "cudaFree(d_plane_ptrs)");
   for (void *p : d_planes)
     cuda_check(cudaFree(p), "cudaFree(plane)");
 
