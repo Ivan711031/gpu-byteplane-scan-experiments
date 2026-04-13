@@ -2,9 +2,17 @@
 
 Author: Codex (handoff addendum for Nick)  
 Date: 2026-04-10 (CST, UTC+8)  
-Last Updated: 2026-04-10 21:35 CST  
+Last Updated: 2026-04-10 22:22 CST  
 Base Reference: `handoff/2026-04-10_Project_Spec_and_Log.md`  
 Scope: **Delta only** (this file records only newly implemented work and validation in this session)
+
+## 0. Current Status Gate (Must Read)
+
+Although this reimplementation improves `k=1..6`, the current `exp1` byte-path behavior is **not accepted as final** and should be treated as a regression against intended scaling behavior:
+
+1. `k=7..8` throughput regressed versus the previous run.
+2. The curve still does not match the expected near-memory-bound trend for higher `k`.
+3. Next handoff should prioritize fixing high-`k` behavior before claiming optimization success.
 
 ## 1. What Was Reimplemented (Exp1)
 
@@ -132,6 +140,7 @@ Observation:
 1. `k=1..6` improved.
 2. `k=7..8` regressed vs previous run.
 3. Scaling remains non-ideal for strict memory-bound expectation; further analysis still needed.
+4. **Project decision**: treat this state as "needs improvement", not "optimization completed."
 
 ### 3.3 New Nsight artifacts generated
 1. `results/exp1/ncu_exp1_linesrc_20260410_172704.ncu-rep` (2026-04-10 17:27)
@@ -156,3 +165,6 @@ Observation:
 1. Run full sweep for `strategy=packed32` under same `N=1e8, k=1..8` to validate Action B impact directly.
 2. Re-profile hot spots at `k=6..8` with Nsight Compute (separate reports) to explain high-k regression.
 3. Add a side-by-side CSV comparison script into repo (`results/exp1/compare_*.sh` or similar) for repeatable reporting.
+4. Gate condition for next checkpoint:
+   - No regression at `k=7..8` compared to `run_20260410_144202_job16611_H200/exp1.csv`.
+   - Throughput trend should not collapse in high `k` range.
