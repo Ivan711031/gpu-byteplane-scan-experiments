@@ -14,7 +14,7 @@ K_MAX="${K_MAX:-8}"
 BLOCK="${BLOCK:-256}"
 GRID_MUL="${GRID_MUL:-1}"
 WARMUP="${WARMUP:-10}"
-ITERS="${ITERS:-200}"
+ITERS="${ITERS:-1000}"
 CUDA_ARCH="${CUDA_ARCH:-90}"
 
 join_cmd() {
