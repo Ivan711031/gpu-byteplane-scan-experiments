@@ -1,0 +1,4 @@
+n=100000000
+element_bytes=8
+estimated_data_allocation_bytes=800000000
+notes=d_out_allocation_depends_on_runtime_occupancy_grid

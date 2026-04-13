@@ -1,0 +1,17 @@
+run_description=No description provided for this baseline run.
+timestamp=20260413_123411
+hostname=25a-hgpn107
+pwd=/home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments
+slurm_job_id=17313
+slurm_job_name=exp1_baseline_runner
+slurm_job_partition=dev
+cuda_visible_devices=0
+gpu_name=NVIDIA H200
+gpu_tag=H200
+device_index=0
+cuda_arch=90
+git_branch=main
+git_commit=c2c74a8facc026282970c20a8fef8346980edba7
+git_dirty=dirty
+memory_setup_file=/home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/results/exp1/run_20260413_123411_job17313_H200_contiguous64/setup_estimate.txt
+command_contiguous_baseline=/home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/build/exp1/bench_contiguous_baseline --device 0 --n 100000000 --block 256 --grid_mul 1 --warmup 10 --iters 1000 --csv /home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/results/exp1/run_20260413_123411_job17313_H200_contiguous64/contiguous_baseline.csv 

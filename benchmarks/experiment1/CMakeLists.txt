@@ -8,12 +8,18 @@ set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 add_executable(bench_byteplane_scan bench_byteplane_scan.cu)
+add_executable(bench_contiguous_baseline bench_contiguous_baseline.cu)
 
-target_compile_options(bench_byteplane_scan PRIVATE
-  $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math -O3 -lineinfo>
-  $<$<COMPILE_LANGUAGE:CXX>:-O3>
-)
+function(configure_exp1_target target_name)
+  target_compile_options(${target_name} PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math -O3 -lineinfo>
+    $<$<COMPILE_LANGUAGE:CXX>:-O3>
+  )
 
-set_target_properties(bench_byteplane_scan PROPERTIES
-  CUDA_SEPARABLE_COMPILATION OFF
-)
+  set_target_properties(${target_name} PROPERTIES
+    CUDA_SEPARABLE_COMPILATION OFF
+  )
+endfunction()
+
+configure_exp1_target(bench_byteplane_scan)
+configure_exp1_target(bench_contiguous_baseline)

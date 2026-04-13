@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=exp0_runner
+#SBATCH --job-name=exp1_baseline_runner
 #SBATCH --partition=dev
 #SBATCH --account=gov108018
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --time=00:30:00
-#SBATCH --output=exp0_runner_%j.log
-#SBATCH --error=exp0_runner_%j.err
+#SBATCH --output=exp1_baseline_runner_%j.log
+#SBATCH --error=exp1_baseline_runner_%j.err
 
 set -euo pipefail
 
@@ -33,4 +33,4 @@ fi
 conda activate gpu-byteplane-scan
 
 cd "$ROOT_DIR"
-"$ROOT_DIR/scripts/run_exp0.sh" "$@"
+"$ROOT_DIR/scripts/run_exp1_baseline.sh" "$@"

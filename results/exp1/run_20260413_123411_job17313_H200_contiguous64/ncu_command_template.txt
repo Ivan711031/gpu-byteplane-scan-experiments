@@ -1,0 +1,3 @@
+# Adjust metrics and output path as needed.
+cd /home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments
+ncu --set full --target-processes all --import-source yes --source-folders /home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments --export /home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/results/exp1/run_20260413_123411_job17313_H200_contiguous64/ncu_contiguous_baseline /home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/build/exp1/bench_contiguous_baseline --device 0 --n 100000000 --block 256 --grid_mul 1 --warmup 10 --iters 1000 --csv /home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/results/exp1/run_20260413_123411_job17313_H200_contiguous64/contiguous_baseline_ncu.csv 
