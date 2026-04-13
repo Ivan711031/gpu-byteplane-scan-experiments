@@ -1,0 +1,17 @@
+run_description=Validate byte-only pointer-bundle refactor via run_exp1.sh
+timestamp=20260411_215755
+hostname=25a-hgpn033
+pwd=/home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments
+slurm_job_id=16960
+slurm_job_name=bash
+slurm_job_partition=dev
+cuda_visible_devices=0
+gpu_name=NVIDIA H200
+gpu_tag=H200
+device_index=0
+cuda_arch=90
+git_branch=main
+git_commit=790784c43fdd466b6b1a69ac08be3bf5f3290b4d
+git_dirty=dirty
+memory_setup_file=/home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/results/exp1/run_20260411_215755_job16960_H200/setup_estimate.txt
+command_exp1=/home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/build/exp1/bench_byteplane_scan --device 0 --n 1000000 --plane_bytes 1 --strategy byte --k_min 1 --k_max 8 --block 256 --grid_mul 1 --warmup 1 --iters 5 --csv /home/ccres1995/workspace_hanyin/gpu-byteplane-scan-experiments/results/exp1/run_20260411_215755_job16960_H200/exp1.csv 

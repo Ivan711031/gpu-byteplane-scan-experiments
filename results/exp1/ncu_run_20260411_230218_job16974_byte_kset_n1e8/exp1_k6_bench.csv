@@ -1,0 +1,2 @@
+strategy,plane_bytes,k,n,logical_bytes,overfetch_factor,block,grid,warmup,iters,ms_per_iter,logical_GBps,device,sm,cc_major,cc_minor
+byte,1,6,100000000,600000000,1.000,256,1056,1,1,0.302496,1983.497,NVIDIA H200,132,9,0
