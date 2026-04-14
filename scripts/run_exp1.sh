@@ -9,6 +9,7 @@ DEVICE="${DEVICE:-0}"
 N="${N:-100000000}"
 PLANE_BYTES="${PLANE_BYTES:-1}"
 STRATEGY="${STRATEGY:-byte}"
+BYTE_VARIANT="${BYTE_VARIANT:-baseline}"
 K_MIN="${K_MIN:-1}"
 K_MAX="${K_MAX:-8}"
 BLOCK="${BLOCK:-256}"
@@ -96,6 +97,14 @@ else
   total_planes=4
 fi
 
+byte_variant_args=()
+if [[ "$STRATEGY" == "byte" && "$PLANE_BYTES" == "1" ]]; then
+  byte_variant_args=(--byte_variant "$BYTE_VARIANT")
+elif [[ "$BYTE_VARIANT" != "baseline" ]]; then
+  echo "error: BYTE_VARIANT only applies when STRATEGY=byte and PLANE_BYTES=1" >&2
+  exit 2
+fi
+
 plane_alloc_bytes=$((N * PLANE_BYTES * total_planes))
 pointer_array_bytes=$((total_planes * 8))
 
@@ -126,6 +135,7 @@ exp1_cmd=(
   --n "$N"
   --plane_bytes "$PLANE_BYTES"
   --strategy "$STRATEGY"
+  "${byte_variant_args[@]}"
   --k_min "$K_MIN" --k_max "$K_MAX"
   --block "$BLOCK" --grid_mul "$GRID_MUL"
   --warmup "$WARMUP" --iters "$ITERS"
@@ -148,6 +158,7 @@ meta_file="$run_dir/run_meta.txt"
   printf 'gpu_tag=%s\n' "$gpu_tag"
   printf 'device_index=%s\n' "$DEVICE"
   printf 'cuda_arch=%s\n' "$CUDA_ARCH"
+  printf 'byte_variant=%s\n' "$BYTE_VARIANT"
   printf 'git_branch=%s\n' "$git_branch"
   printf 'git_commit=%s\n' "$git_commit"
   printf 'git_dirty=%s\n' "$git_dirty"
@@ -165,7 +176,7 @@ meta_file="$run_dir/run_meta.txt"
   printf 'cd %q\n' "$ROOT_DIR"
   printf 'ncu --set full --target-processes all --import-source yes --source-folders %q --export %q %s\n' \
     "$ROOT_DIR" \
-    "$run_dir/ncu_exp1" "$(join_cmd "$bin" --device "$DEVICE" --n "$N" --plane_bytes "$PLANE_BYTES" --strategy "$STRATEGY" --k_min "$K_MIN" --k_max "$K_MAX" --block "$BLOCK" --grid_mul "$GRID_MUL" --warmup "$WARMUP" --iters "$ITERS" --csv "$run_dir/exp1_ncu.csv")"
+    "$run_dir/ncu_exp1" "$(join_cmd "$bin" --device "$DEVICE" --n "$N" --plane_bytes "$PLANE_BYTES" --strategy "$STRATEGY" "${byte_variant_args[@]}" --k_min "$K_MIN" --k_max "$K_MAX" --block "$BLOCK" --grid_mul "$GRID_MUL" --warmup "$WARMUP" --iters "$ITERS" --csv "$run_dir/exp1_ncu.csv")"
 } > "$run_dir/ncu_command_template.txt"
 
 printf 'exp1 outputs in: %s\n' "$run_dir"

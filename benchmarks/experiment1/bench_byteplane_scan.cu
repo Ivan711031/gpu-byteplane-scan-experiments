@@ -46,6 +46,27 @@ namespace
     return true;
   }
 
+  enum class ByteVariant
+  {
+    Baseline,
+    Ilp4,
+  };
+
+  [[nodiscard]] bool parse_byte_variant(std::string_view s, ByteVariant &out)
+  {
+    if (s == "baseline")
+    {
+      out = ByteVariant::Baseline;
+      return true;
+    }
+    if (s == "ilp4")
+    {
+      out = ByteVariant::Ilp4;
+      return true;
+    }
+    return false;
+  }
+
   struct Options
   {
     int device = 0;
@@ -53,6 +74,7 @@ namespace
 
     int plane_bytes = 1;           // 1 => 8 planes of uint8, 2 => 4 planes of uint16
     std::string strategy = "byte"; // byte|packed32|shared128
+    ByteVariant byte_variant = ByteVariant::Baseline;
 
     bool single_k = false;
     int k_single = 0;
@@ -81,6 +103,7 @@ namespace
                  "  --n N                 Number of FP64 values (default: 100000000)\n"
                  "  --plane_bytes 1|2     1-byte planes (8 planes) or 2-byte planes (4 planes) (default: 1)\n"
                  "  --strategy NAME       byte | packed32 | shared128 (default: byte)\n"
+                 "  --byte_variant NAME   baseline | ilp4; only for --strategy byte --plane_bytes 1 (default: baseline)\n"
                  "  --k N                 Single k (planes to read)\n"
                  "  --k_min N             Sweep min k (default: 1)\n"
                  "  --k_max N             Sweep max k (default: 8)\n"
@@ -103,6 +126,7 @@ namespace
     bool k_min_set = false;
     bool k_max_set = false;
     bool k_set = false;
+    bool byte_variant_set = false;
     for (int i = 1; i < argc; i++)
     {
       std::string_view a(argv[i]);
@@ -146,6 +170,12 @@ namespace
       else if (a == "--strategy")
       {
         opt.strategy = std::string(need_value(a));
+      }
+      else if (a == "--byte_variant")
+      {
+        if (!parse_byte_variant(need_value(a), opt.byte_variant))
+          die("invalid --byte_variant");
+        byte_variant_set = true;
       }
       else if (a == "--k")
       {
@@ -217,6 +247,14 @@ namespace
     if (opt.plane_bytes == 2 && opt.strategy == "shared128")
     {
       die("--strategy shared128 only supported for --plane_bytes 1");
+    }
+    if (opt.byte_variant == ByteVariant::Ilp4 && !(opt.plane_bytes == 1 && opt.strategy == "byte"))
+    {
+      die("--byte_variant ilp4 only supported for --strategy byte --plane_bytes 1");
+    }
+    if (byte_variant_set && opt.plane_bytes == 2 && opt.strategy == "byte")
+    {
+      die("--byte_variant only applies to --strategy byte --plane_bytes 1");
     }
 
     int planes_total = (opt.plane_bytes == 1) ? 8 : 4;
@@ -353,6 +391,157 @@ namespace
     default:
       die("invalid k for byte strategy launch");
     }
+  }
+
+  template <int K>
+  __global__ void scan_planes_u8_byte_ilp4(const U8Planes planes,
+                                           uint64_t n,
+                                           unsigned long long *__restrict__ per_block_out)
+  {
+    static_assert(K >= 1 && K <= 8, "K must be in [1, 8]");
+    unsigned long long sum0 = 0;
+    unsigned long long sum1 = 0;
+    unsigned long long sum2 = 0;
+    unsigned long long sum3 = 0;
+
+    uint64_t tid = static_cast<uint64_t>(blockIdx.x) * static_cast<uint64_t>(blockDim.x) +
+                   static_cast<uint64_t>(threadIdx.x);
+    uint64_t stride = static_cast<uint64_t>(gridDim.x) * static_cast<uint64_t>(blockDim.x);
+    uint64_t step = stride * 4ull;
+    uint64_t i = tid;
+
+    for (; i < n;)
+    {
+      uint64_t i1 = i + stride;
+      uint64_t i2 = i1 + stride;
+      uint64_t i3 = i2 + stride;
+      if (i1 < i || i2 < i1 || i3 < i2 || i3 >= n)
+        break;
+
+#pragma unroll
+      for (int p = 0; p < K; p++)
+      {
+        sum0 += static_cast<unsigned long long>(planes.ptrs[p][i]);
+        sum1 += static_cast<unsigned long long>(planes.ptrs[p][i1]);
+        sum2 += static_cast<unsigned long long>(planes.ptrs[p][i2]);
+        sum3 += static_cast<unsigned long long>(planes.ptrs[p][i3]);
+      }
+
+      uint64_t next = i + step;
+      if (next <= i)
+        break;
+      i = next;
+    }
+
+    for (; i < n;)
+    {
+#pragma unroll
+      for (int p = 0; p < K; p++)
+        sum0 += static_cast<unsigned long long>(planes.ptrs[p][i]);
+
+      uint64_t next = i + stride;
+      if (next <= i)
+        break;
+      i = next;
+    }
+
+    unsigned long long sum = sum0 + sum1 + sum2 + sum3;
+    block_reduce_store(sum, per_block_out);
+  }
+
+  const void *scan_planes_u8_byte_ilp4_kernel_ptr(int k)
+  {
+    switch (k)
+    {
+    case 1:
+      return reinterpret_cast<const void *>(scan_planes_u8_byte_ilp4<1>);
+    case 2:
+      return reinterpret_cast<const void *>(scan_planes_u8_byte_ilp4<2>);
+    case 3:
+      return reinterpret_cast<const void *>(scan_planes_u8_byte_ilp4<3>);
+    case 4:
+      return reinterpret_cast<const void *>(scan_planes_u8_byte_ilp4<4>);
+    case 5:
+      return reinterpret_cast<const void *>(scan_planes_u8_byte_ilp4<5>);
+    case 6:
+      return reinterpret_cast<const void *>(scan_planes_u8_byte_ilp4<6>);
+    case 7:
+      return reinterpret_cast<const void *>(scan_planes_u8_byte_ilp4<7>);
+    case 8:
+      return reinterpret_cast<const void *>(scan_planes_u8_byte_ilp4<8>);
+    default:
+      die("invalid k for byte ilp4 strategy kernel pointer");
+    }
+  }
+
+  void launch_scan_planes_u8_byte_ilp4(int k,
+                                       int grid,
+                                       int block_threads,
+                                       const U8Planes &planes,
+                                       uint64_t n,
+                                       unsigned long long *per_block_out)
+  {
+    switch (k)
+    {
+    case 1:
+      scan_planes_u8_byte_ilp4<1><<<grid, block_threads>>>(planes, n, per_block_out);
+      return;
+    case 2:
+      scan_planes_u8_byte_ilp4<2><<<grid, block_threads>>>(planes, n, per_block_out);
+      return;
+    case 3:
+      scan_planes_u8_byte_ilp4<3><<<grid, block_threads>>>(planes, n, per_block_out);
+      return;
+    case 4:
+      scan_planes_u8_byte_ilp4<4><<<grid, block_threads>>>(planes, n, per_block_out);
+      return;
+    case 5:
+      scan_planes_u8_byte_ilp4<5><<<grid, block_threads>>>(planes, n, per_block_out);
+      return;
+    case 6:
+      scan_planes_u8_byte_ilp4<6><<<grid, block_threads>>>(planes, n, per_block_out);
+      return;
+    case 7:
+      scan_planes_u8_byte_ilp4<7><<<grid, block_threads>>>(planes, n, per_block_out);
+      return;
+    case 8:
+      scan_planes_u8_byte_ilp4<8><<<grid, block_threads>>>(planes, n, per_block_out);
+      return;
+    default:
+      die("invalid k for byte ilp4 strategy launch");
+    }
+  }
+
+  const void *scan_planes_u8_byte_kernel_ptr(ByteVariant variant, int k)
+  {
+    switch (variant)
+    {
+    case ByteVariant::Baseline:
+      return scan_planes_u8_byte_unrolled_kernel_ptr(k);
+    case ByteVariant::Ilp4:
+      return scan_planes_u8_byte_ilp4_kernel_ptr(k);
+    }
+    die("invalid byte variant for kernel pointer");
+  }
+
+  void launch_scan_planes_u8_byte(ByteVariant variant,
+                                  int k,
+                                  int grid,
+                                  int block_threads,
+                                  const U8Planes &planes,
+                                  uint64_t n,
+                                  unsigned long long *per_block_out)
+  {
+    switch (variant)
+    {
+    case ByteVariant::Baseline:
+      launch_scan_planes_u8_byte_unrolled(k, grid, block_threads, planes, n, per_block_out);
+      return;
+    case ByteVariant::Ilp4:
+      launch_scan_planes_u8_byte_ilp4(k, grid, block_threads, planes, n, per_block_out);
+      return;
+    }
+    die("invalid byte variant for launch");
   }
 
   __global__ void scan_planes_u8_packed32(const uint32_t *const *__restrict__ planes32,
@@ -520,12 +709,13 @@ namespace
       }
       else if (opt.strategy == "byte")
       {
-        launch_scan_planes_u8_byte_unrolled(k,
-                                            grid,
-                                            opt.block_threads,
-                                            u8_planes,
-                                            opt.n,
-                                            d_out);
+        launch_scan_planes_u8_byte(opt.byte_variant,
+                                   k,
+                                   grid,
+                                   opt.block_threads,
+                                   u8_planes,
+                                   opt.n,
+                                   d_out);
       }
       else if (opt.strategy == "packed32")
       {
@@ -556,12 +746,13 @@ namespace
       }
       else if (opt.strategy == "byte")
       {
-        launch_scan_planes_u8_byte_unrolled(k,
-                                            grid,
-                                            opt.block_threads,
-                                            u8_planes,
-                                            opt.n,
-                                            d_out);
+        launch_scan_planes_u8_byte(opt.byte_variant,
+                                   k,
+                                   grid,
+                                   opt.block_threads,
+                                   u8_planes,
+                                   opt.n,
+                                   d_out);
       }
       else if (opt.strategy == "packed32")
       {
@@ -771,7 +962,7 @@ int main(int argc, char **argv)
     for (int kk = 1; kk <= 8; kk++)
     {
       int g = occupancy_grid(opt.device, opt.block_threads, opt.grid_mul,
-                             scan_planes_u8_byte_unrolled_kernel_ptr(kk), 0);
+                             scan_planes_u8_byte_kernel_ptr(opt.byte_variant, kk), 0);
       grid_by_k[static_cast<size_t>(kk)] = g;
       if (g > max_needed_grid)
         max_needed_grid = g;
