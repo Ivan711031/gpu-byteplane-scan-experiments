@@ -1,0 +1,11 @@
+report,load_opcodes
+byte_ilp4_k1,LDG.E.U8:8b
+byte_ilp4_k4,LDG.E.U8:8b
+byte_ilp4_k8,LDG.E.U8:8b
+rowpack4_k1,LDG.E:32b
+rowpack4_k4,LDG.E:32b
+rowpack4_k8,LDG.E:32b
+rowpack16_k1,LDG.E.128:128b
+rowpack16_k4,LDG.E.128:128b
+rowpack16_k8,LDG.E.128:128b
+contiguous64,LDG.E.64.CONSTANT:64b

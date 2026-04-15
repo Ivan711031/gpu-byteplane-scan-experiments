@@ -70,13 +70,19 @@ Runner 預設配置：
   --csv exp1_byteplane_scan.csv
 ```
 
+可加 `--validate` 執行每個 `k` 的非計時總和檢查；validation 不放進 timed loop。
+
 ## Strategies
 
-- `--strategy byte`: 每個 thread 對每個 plane 直接做 `uint8` load。
-- `--strategy packed32`: 每次 `uint32` 讀取 4 個 elements，避免 1-byte 指令。
-- `--strategy shared128`: warp 先 stage 128B 到 shared，再每 lane 取其中 1 byte（刻意 overfetch）。
+- `--strategy byte`: scalar byte-plane load；`--byte_variant baseline|ilp4` 只適用於此策略。
+- `--strategy rowpack4`: row-wise `uint32` packed load；每次從同一個 byte-plane 讀 4 個連續 rows。
+- `--strategy rowpack16`: row-wise `uint4` 128-bit packed load；每次從同一個 byte-plane 讀 16 個連續 rows。
+- `--strategy shared128`: warp 先 stage 128B 到 shared，再消耗 32 個 logical rows（diagnostic overfetch path）。
+- `--strategy packed32`: backward-compatible alias；程式會正規化成 `rowpack4`，CSV 也寫 `rowpack4`。
 
 另支援 `--plane_bytes 2`（4 個 `uint16` planes），此時策略固定為 `byte`（u16 loads）。
+
+`rowpack4` / `rowpack16` pack 的是同一個 byte-plane 裡的連續 rows，不是同一 row 的多個 precision bytes；`k` 仍然只控制讀取前幾個 byte-planes。
 
 ## Output
 
