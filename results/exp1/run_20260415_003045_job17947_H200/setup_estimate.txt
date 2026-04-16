@@ -1,0 +1,6 @@
+n=100000000
+plane_bytes=1
+total_planes=8
+estimated_plane_allocation_bytes=800000000
+estimated_pointer_array_bytes=64
+notes=d_out_allocation_depends_on_runtime_occupancy_grid

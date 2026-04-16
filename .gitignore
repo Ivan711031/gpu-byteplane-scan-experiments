@@ -2,6 +2,9 @@ M03-initial-guide.md
 
 build/
 
+.DS_Store
+**/.DS_Store
+
 # results/ intentionally tracked for benchmark artifacts.
 
 /*.log
